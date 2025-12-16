@@ -450,25 +450,38 @@ def seleccionar_columnas_detalle(df: pd.DataFrame) -> pd.DataFrame:
     return df.iloc[:, indices]
 
 
+def leer_archivo_cargado(file_obj):
+    """Lee CSV/Excel con tolerancia de encoding para evitar UnicodeDecodeError."""
+    name = file_obj.name.lower()
+    if name.endswith('.csv'):
+        for enc in ('utf-8', 'utf-8-sig', 'latin1'):
+            try:
+                return pd.read_csv(file_obj, encoding=enc)
+            except UnicodeDecodeError:
+                file_obj.seek(0)
+                continue
+        # Último intento con reemplazo de caracteres
+        file_obj.seek(0)
+        return pd.read_csv(file_obj, encoding='latin1', errors='replace')
+    else:
+        # Excel
+        return pd.read_excel(file_obj)
+
+
 # =============================
 # Acción principal
 # =============================
 
 if f_est is not None and f_tabla is not None:
-    # Lee archivos cargados desde la barra lateral
+    # Lee archivos cargados desde la barra lateral con tolerancia de encoding
     try:
-        if f_est.name.lower().endswith('.csv'):
-            df = pd.read_csv(f_est)
-        else:
-            df = pd.read_excel(f_est)
-    except Exception:
-        df = pd.read_csv(f_est)
+        df = leer_archivo_cargado(f_est)
+    except Exception as e:
+        st.error(f"Error leyendo el archivo del estudiante: {e}")
+        st.stop()
 
     try:
-        if f_tabla.name.lower().endswith('.csv'):
-            tabla_agrupada = pd.read_csv(f_tabla)
-        else:
-            tabla_agrupada = pd.read_excel(f_tabla)
+        tabla_agrupada = leer_archivo_cargado(f_tabla)
     except Exception as e:
         st.error(f"Error leyendo la tabla agrupada: {e}")
         st.stop()
