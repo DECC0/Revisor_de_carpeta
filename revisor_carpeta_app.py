@@ -465,7 +465,11 @@ def leer_archivo_cargado(file_obj):
         return pd.read_csv(file_obj, encoding='latin1', errors='replace')
     else:
         # Excel
-        return pd.read_excel(file_obj)
+        try:
+            return pd.read_excel(file_obj, engine="openpyxl")
+        except ImportError as e:
+            # Mensaje claro si el runtime no tiene openpyxl instalado
+            raise ImportError("Falta la dependencia 'openpyxl' en el entorno de ejecución.") from e
 
 
 # =============================
