@@ -59,6 +59,7 @@ with st.sidebar:
 # ============================
 
 def parse_nota(x):
+    # Normaliza nota: numérica o "A"; NaN si no es interpretable
     if pd.isna(x):
         return np.nan
     s = str(x).strip()
@@ -71,6 +72,7 @@ def parse_nota(x):
 
 
 def is_pass(n):
+    # Aprobado si nota >=3 o es "A"
     if isinstance(n, (int, float, np.floating)):
         return n >= 3
     if isinstance(n, str) and n.upper() == "A":
@@ -79,6 +81,7 @@ def is_pass(n):
 
 
 def nota_para_orden(n):
+    # Valor numérico para ordenar; "A" se toma como 5.0
     if isinstance(n, (int, float, np.floating)):
         return float(n)
     if isinstance(n, str) and n.upper() == "A":
@@ -106,7 +109,7 @@ def evaluar(df: pd.DataFrame, tabla_agrupada: pd.DataFrame, cursos: Dict[str, fl
             meta_cle: float = 6.0,
             exigir_cbus_total_6: bool = True,
             exigir_ecur_epsi: bool = True):
-    # 0) mapa curso->sección
+    # 0) Mapa curso->sección
     tabla_agrupada = ensure_list_column(tabla_agrupada)
     tabla_map = (
         tabla_agrupada
@@ -117,7 +120,7 @@ def evaluar(df: pd.DataFrame, tabla_agrupada: pd.DataFrame, cursos: Dict[str, fl
     tabla_map["Sección"] = tabla_map["Sección"].astype(str).str.strip()
     curso_a_seccion = dict(zip(tabla_map["Curso"], tabla_map["Sección"]))
 
-    # 1) normalizar df
+    # 1) Normalizar df del estudiante
     dfw = df.copy()
     for col in ["Materia/examen", "Créditos", "Nota final"]:
         if col not in dfw.columns:
@@ -128,7 +131,7 @@ def evaluar(df: pd.DataFrame, tabla_agrupada: pd.DataFrame, cursos: Dict[str, fl
     dfw['Aprobado'] = dfw['nota_parsed'].apply(is_pass)
     dfw['nota_sort'] = dfw['nota_parsed'].apply(nota_para_orden)
 
-    # 2) mejor intento por curso
+    # 2) Mejor intento por curso (mejor nota y aprobado)
     df_best = (
         dfw.sort_values(['Aprobado', 'nota_sort'], ascending=[False, False])
            .drop_duplicates(subset=['Materia/examen'], keep='first')
@@ -136,7 +139,7 @@ def evaluar(df: pd.DataFrame, tabla_agrupada: pd.DataFrame, cursos: Dict[str, fl
     )
     df_best['Sección'] = df_best['Materia/examen'].map(curso_a_seccion)
 
-    # 3) créditos por sección
+    # 3) Créditos por sección
     aprb = df_best['Aprobado'].fillna(False)
     cred = df_best['Créditos'].fillna(0)
     creditos_por_seccion = (
@@ -160,7 +163,7 @@ def evaluar(df: pd.DataFrame, tabla_agrupada: pd.DataFrame, cursos: Dict[str, fl
     else:
         longn_up = pd.Series([""] * len(df_best), index=df_best.index)
 
-    # Educación general
+    # Educación general: obligatorios + ECUR/EPSI
     SECC_EDU_GEN = 'Cursos de educación general'
     req_names_escr = {"ESCRITURA UNIVERSITARIA I", "ESCRITURA UNIVERSITARIA II"}
     req_dere_code = 'DERE-1300'
@@ -189,7 +192,7 @@ def evaluar(df: pd.DataFrame, tabla_agrupada: pd.DataFrame, cursos: Dict[str, fl
     edug_obli_ok = all(obli_ok.values())
     educacion_general_ok = edug_obli_ok and ecur_ok and epsi_ok
 
-    # CBUS
+    # CBUS: CBCC-1177, 1 de cada tipo y total mínimo
     is_cbus      = cod.str.match(r"^(CBCA|CBPC|CBCO|CBCC)-\d{3,4}$", na=False)
     is_cbcc_1177 = (cod == 'CBCC-1177')
     is_cbca      = cod.str.match(r"^CBCA-\d{3,4}$", na=False)
@@ -206,7 +209,7 @@ def evaluar(df: pd.DataFrame, tabla_agrupada: pd.DataFrame, cursos: Dict[str, fl
     cbus_total_ok     = (cbus_total_cnt >= 6) if exigir_cbus_total_6 else (cbus_total_cnt >= 3)
     cbus_ok           = cbcc_ok and cbus_tipos_min_ok and cbus_total_ok
 
-    # CLE
+    # CLE: créditos válidos por reglas específicas
     is_depo = cod.str.match(r"^DEPO-\d{3,4}$", na=False)
     depo_ok_cred = float(cred[aprb & is_depo & (cred == 1)].sum())
     unmapped_ok_cred = float(cred[aprb & df_best['Sección'].isna() & ~is_cbus & ~is_depo].sum())
@@ -236,7 +239,7 @@ def evaluar(df: pd.DataFrame, tabla_agrupada: pd.DataFrame, cursos: Dict[str, fl
     cle_credits = float(depo_ok_cred + unmapped_ok_cred + excedente_adv + edug_3cred_para_cle)
     cle_ok = cle_credits >= float(meta_cle)
 
-    # ECAP / RLEC / RDOM
+    # ECAP / RLEC / RDOM: notas especiales
     nota_raw_up = df_best['Nota final'].astype(str).str.strip().str.upper()
     is_ecap = cod.str.match(r"^ECAP", na=False)
     is_rlec = cod.str.match(r"^RLEC", na=False)
@@ -386,7 +389,7 @@ def evaluar(df: pd.DataFrame, tabla_agrupada: pd.DataFrame, cursos: Dict[str, fl
     df_used = df_best.copy()
     df_used['Usado'] = used
     df_used['Motivo uso'] = used_reason
-    df_used['Sección original'] = df_best['Sección'].fillna('Sin sección')
+    #df_used['Sección original'] = df_best['Sección'].fillna('Sin sección')
 
     df_no_usado = df_used[aprb_main & (~df_used['Usado'])].copy()
     df_no_usado['Sección para conteo'] = df_no_usado['Sección']
@@ -452,7 +455,7 @@ def seleccionar_columnas_detalle(df: pd.DataFrame) -> pd.DataFrame:
 # =============================
 
 if f_est is not None and f_tabla is not None:
-    # Lee archivos
+    # Lee archivos cargados desde la barra lateral
     try:
         if f_est.name.lower().endswith('.csv'):
             df = pd.read_csv(f_est)
@@ -475,7 +478,7 @@ if f_est is not None and f_tabla is not None:
     with st.expander("👀 Vista previa – Tabla agrupada", expanded=False):
         st.dataframe(tabla_agrupada, use_container_width=True)
 
-    # Ejecuta evaluación
+    # Ejecuta evaluación con parámetros del sidebar
     try:
         df_best, resultado, faltantes, extras, resultado_ext, df_no_usado = evaluar(
             df, tabla_agrupada, cursos,
